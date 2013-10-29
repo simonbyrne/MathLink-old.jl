@@ -1,16 +1,19 @@
 using MathLink
 
 e = mlinitialize()
-l = mlopen(e,["-linkname","MathKernel -mathlink"])
+l = mlopen(e)
+mlactivate(l)
 
-# skip input packet
-p = mlnextpacket(l)
+# skip initial input packet
+mlnextpacket(l) != MathLink.INPUTNAMEPKT && error("Unexpected MathLink packet")
 mlnewpacket(l)
 
 
 # log(2.0)
+mlputfunction(l,"EvaluatePacket",1)
 mlputfunction(l,"Log",1)
 mlput(l,2.0)
+mlendpacket(l)
 
 # check for next packet
 p = mlnextpacket(l)
@@ -19,8 +22,10 @@ t = mlgetnext(l) # a real
 mlget(l,Float64)
 
 # log(2)
+mlputfunction(l,"EvaluatePacket",1)
 mlputfunction(l,"Log",1)
 mlput(l,2)
+mlendpacket(l)
 
 # check for next packet
 p = mlnextpacket(l)
