@@ -117,11 +117,8 @@ for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
             if ccall(mathlink_fn($(string(:MLGet,T,:List))), MLRTN, (MLINK, Ptr{Ptr{$T}}, Ptr{Cint}), ml, aa, la) == MLRTN_ERR
                 error("MathLink error ", mlerror(ml))
             end
-            a = Array($T,la[1])
-            for i = 1:la[1]
-                a[i] = unsafe_load(aa[1],i)
-            end
-            ccall(mathlink_fn($(string(:MLRelease,T,:List))), None, (MLINK, Ptr{$T}, Cint), ml, aa[1], la[1])
+            a = pointer_to_array(aa[1],la[1])
+            finalizer(a, a -> ccall(mathlink_fn($(string(:MLRelease,T,:List))), None, (MLINK, Ptr{$T}, Cint), ml, aa[1], la[1]))
             return a
         end
         
@@ -144,17 +141,13 @@ for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
                      ml, aa, la, ha, nda) == MLRTN_ERR
                 error("MathLink error ", mlerror(ml))
             end
-            dims = Int[unsafe_load(la[1],i) for i = nda[1]:-1:1]
-            a = Array($T,dims...)
-            for i = 1:prod(dims)
-                a[i] = unsafe_load(aa[1],i)
-            end
-            ccall(mathlink_fn($(string(:MLRelease,T,:Array))), None, 
-                  (MLINK, Ptr{$T}, Ptr{Cint}, Ptr{Ptr{Uint8}}, Cint), 
-                  ml, aa[1], la[1], ha[1], nda[1])
+            dims = tuple(Int64[unsafe_load(la[1],i) for i = nda[1]:-1:1]...)
+            a = pointer_to_array(aa[1],dims)
+            finalizer(a, a -> ccall(mathlink_fn($(string(:MLRelease,T,:Array))), None, 
+                                    (MLINK, Ptr{$T}, Ptr{Cint}, Ptr{Ptr{Uint8}}, Cint), 
+                                    ml, aa[1], la[1], ha[1], nda[1]))
             return a
         end
-
     end
 end
 
