@@ -5,6 +5,21 @@ typealias MLERR Cint
 typealias MLRTN Cint
 typealias MLTKN Cint
 
+
+type MLEnv
+    env::Ptr{Void}
+end
+
+type MLink
+    link::Ptr{Void}
+end
+
+type MLFunction
+    name::Symbol
+    nargs::Int
+end
+
+
 # MathLink type names
 typealias Integer16 Int16
 typealias Integer32 Int32
@@ -66,5 +81,5 @@ const tokens = [
                 convert(MLTKN,'#') => Symbol,
                 convert(MLTKN,'*') => FloatingPoint,
                 convert(MLTKN,'+') => Integer,
-                convert(MLTKN,'F') => Expr, # function
+                convert(MLTKN,'F') => MLFunction, # function
                 ]                

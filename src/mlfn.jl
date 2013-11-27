@@ -59,36 +59,67 @@ mlerror(ml) = ccall(mathlink_fn(:MLError), MLERR, (MLINK,), ml)
 
 # put and get for different types
 
-
-function mlput(ml,s::String)
-    if ccall(mathlink_fn(:MLPutString), MLRTN, (MLINK, Ptr{Uint8}), ml, bytestring(s)) == MLRTN_ERR
+# strings
+function mlput(ml,s::ASCIIString)
+    if ccall(mathlink_fn(:MLPutByteString), MLRTN, (MLINK, Ptr{Uint8}, Cint), ml, s.data, length(s.data)) == MLRTN_ERR
         error("MathLink error ", mlerror(ml))
     end
 end
-function mlget(ml,::Type{String})
+function mlput(ml,s::UTF8String)
+    if ccall(mathlink_fn(:MLPutUTF8String), MLRTN, (MLINK, Ptr{Uint8}, Cint), ml, s.data, length(s.data)) == MLRTN_ERR
+        error("MathLink error ", mlerror(ml))
+    end
+end
+
+function mlputsymbol(ml,s::ASCIIString)
+    if ccall(mathlink_fn(:MLPutByteSymbol), MLRTN, (MLINK, Ptr{Uint8}, Cint), ml, s.data, length(s.data)) == MLRTN_ERR
+        error("MathLink error ", mlerror(ml))
+    end
+end
+function mlputsymbol(ml,s::UTF8String)
+    if ccall(mathlink_fn(:MLPutUTF8Symbol), MLRTN, (MLINK, Ptr{Uint8}, Cint), ml, s.data, length(s.data)) == MLRTN_ERR
+        error("MathLink error ", mlerror(ml))
+    end
+end
+mlput(ml,s::Symbol) = mlputsymbol(ml,string(s))
+
+
+
+function mlget(ml,::Type{ASCIIString})
     stra = Array(Ptr{Uint8},1)
     if ccall(mathlink_fn(:MLGetString), MLRTN, (MLINK, Ptr{Ptr{Uint8}}), ml, stra) == MLRTN_ERR
         error("MathLink error ", mlerror(ml))
     end
     str = bytestring(stra[1])
-    ccall(mathlink_fn(:MLReleaseString), None, (MLINK, Ptr{Uint8}), ml, stra[1])
+    ccall(mathlink_fn(:MLReleaseByteString), None, (MLINK, Ptr{Uint8}), ml, stra[1])
     return str
 end
 
-function mlput(ml,s::Symbol)
-    if ccall(mathlink_fn(:MLPutSymbol), MLRTN, (MLINK, Ptr{Uint8}), ml, string(s)) == MLRTN_ERR
+function mlget(ml,::Type{UTF8String})
+    stra = Array(Ptr{Uint8},1)
+    lb = Array(Cint,1)
+    lc = Array(Cint,1)
+    if ccall(mathlink_fn(:MLGetUTF8String), MLRTN, (MLINK, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, lc) == MLRTN_ERR
         error("MathLink error ", mlerror(ml))
     end
+    str = utf8(pointer_to_array(stra[1],int(lb[1])))
+    finalizer(str.data, a -> ccall(mathlink_fn(:MLReleaseUTF8String), None, (MLINK, Ptr{Uint8}, Cint), ml, stra[1],lb[1]))
+    return str
 end
+mlget(ml,::Type{String}) = mlget(ml,UTF8String)
+
 function mlget(ml,::Type{Symbol})
     stra = Array(Ptr{Uint8},1)
-    if ccall(mathlink_fn(:MLGetSymbol), MLRTN, (MLINK, Ptr{Ptr{Uint8}}), ml, stra) == MLRTN_ERR
+    lb = Array(Cint,1)
+    lc = Array(Cint,1)
+    if ccall(mathlink_fn(:MLGetUTF8Symbol), MLRTN, (MLINK, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, lc) == MLRTN_ERR
         error("MathLink error ", mlerror(ml))
     end
-    str = bytestring(stra[1])
-    ccall(mathlink_fn(:MLReleaseSymbol), None, (MLINK, Ptr{Uint8}), ml, stra[1])
+    str = utf8(pointer_to_array(stra[1],int(lb[1])))
+    finalizer(str.data, a -> ccall(mathlink_fn(:MLReleaseUTF8Symbol), None, (MLINK, Ptr{Uint8}, Cint), ml, stra[1],lb[1]))
     return symbol(str)
 end
+
 
 
 for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
@@ -117,7 +148,7 @@ for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
             if ccall(mathlink_fn($(string(:MLGet,T,:List))), MLRTN, (MLINK, Ptr{Ptr{$T}}, Ptr{Cint}), ml, aa, la) == MLRTN_ERR
                 error("MathLink error ", mlerror(ml))
             end
-            a = pointer_to_array(aa[1],la[1])
+            a = pointer_to_array(aa[1],int(la[1]))
             finalizer(a, a -> ccall(mathlink_fn($(string(:MLRelease,T,:List))), None, (MLINK, Ptr{$T}, Cint), ml, aa[1], la[1]))
             return a
         end
@@ -141,7 +172,7 @@ for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
                      ml, aa, la, ha, nda) == MLRTN_ERR
                 error("MathLink error ", mlerror(ml))
             end
-            dims = tuple(Int64[unsafe_load(la[1],i) for i = nda[1]:-1:1]...)
+            dims = tuple(Int[unsafe_load(la[1],i) for i = nda[1]:-1:1]...)
             a = pointer_to_array(aa[1],dims)
             finalizer(a, a -> ccall(mathlink_fn($(string(:MLRelease,T,:Array))), None, 
                                     (MLINK, Ptr{$T}, Ptr{Cint}, Ptr{Ptr{Uint8}}, Cint), 
@@ -160,13 +191,13 @@ mlget(ml,::Type{FloatingPoint}) = mlget(ml,Real64)
 
 
 # functions
-function mlputfunction(ml,fname,narg)    
-    if ccall(mathlink_fn(:MLPutFunction), MLRTN, (MLINK, Ptr{Uint8}, Cint), ml, fname, narg) == MLRTN_ERR
+function mlput(ml,f::MLFunction)
+    if ccall(mathlink_fn(:MLPutFunction), MLRTN, (MLINK, Ptr{Uint8}, Cint), ml, f.name, f.nargs) == MLRTN_ERR
         error("MathLink error ", mlerror(ml))
     end
 end
 
-function mlgetfunction(ml)
+function mlget(ml,::Type{MLFunction})
     stra = Array(Ptr{Uint8},1)
     na = Array(Cint, 1)
     if ccall(mathlink_fn(:MLGetFunction), MLRTN, (MLINK, Ptr{Ptr{Uint8}}, Ptr{Cint}), ml, stra, na) == MLRTN_ERR
@@ -174,7 +205,7 @@ function mlgetfunction(ml)
     end
     str = bytestring(stra[1])
     ccall(mathlink_fn(:MLReleaseSymbol), None, (MLINK, Ptr{Uint8}), ml, stra[1])
-    return symbol(str), na[1]
+    return MLFunction(symbol(str), na[1])
 end
 
 

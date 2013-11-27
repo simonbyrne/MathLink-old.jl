@@ -1,7 +1,7 @@
 module MathLink
 
 export mlinitialize, mldeinitialize, mlopen, mlclose, mlactivate,
-mlputfunction, mlgetfunction, mlcheckfunction, mlput, mlget, mlnewpacket,
+mlcheckfunction, mlput, mlget, mlnewpacket, MLFunction,
 mlendpacket, mlnextpacket, mlputnext, mlgetnext, mlerror, mlflush, mlready, @mlput
 
 include("setup.jl")

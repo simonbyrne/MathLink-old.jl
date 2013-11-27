@@ -19,7 +19,7 @@ mlendpacket(l)
 p = mlnextpacket(l)
 
 t = mlgetnext(l) # a function: this is a list of lists of integers
-a = mlget(l,Array{Int}) # note: this is transposed from Mathematica output
+mlget(l,Array{Int}) # note: this is transposed from Mathematica output
 
 # done
 mlclose(l)
