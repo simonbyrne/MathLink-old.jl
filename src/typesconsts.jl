@@ -1,23 +1,25 @@
-typealias MLENV Ptr{Void}
-typealias MLINK Ptr{Void}
+type MLEnv
+    ptr::Ptr{Void}
+end
+type MLink
+    ptr::Ptr{Void}
+end
+
 typealias MLPKT Cint
 typealias MLERR Cint
 typealias MLRTN Cint
 typealias MLTKN Cint
 
 
-type MLEnv
-    env::Ptr{Void}
-end
-
-type MLink
-    link::Ptr{Void}
-end
 
 type MLFunction
     name::Symbol
-    nargs::Int
+    nargs::Cint
+    function MLFunction(name,nargs) 
+        new(symbol(name),convert(Cint,nargs))
+    end
 end
+
 
 
 # MathLink type names
@@ -27,6 +29,26 @@ typealias Integer64 Int64
 typealias Real32 Float32
 typealias Real64 Float64
 # typealias Real128 Float128
+typealias MLReals Union(Integer16,Integer32,Integer64,Real32,Real64)
+
+type MLArray{T<:MLReals,N}
+    arrptr::Ptr{T}
+    dimptr::Ptr{Cint}
+    headptr::Ptr{Ptr{Uint8}}
+end
+
+# convert backwards and forwards
+function convert{T,N}(::Type{Array{T}},ma::MLArray{T,N})
+    dims = tuple(Int[unsafe_load(ma.dimptr,i) for i = N:-1:1]...)
+    pointer_to_array(ma.arrptr,dims)
+end
+function convert{T,N}(::Type{MLArray{T}},a::Array{T,N})
+    s = size(a)
+    dims = Cint[s[i] for i = ndims(a):-1:1]
+    MLArray{T,N}(pointer(a),point(dims),C_NULL)
+end
+
+
 
 const MLRTN_ERR = zero(MLRTN)
 

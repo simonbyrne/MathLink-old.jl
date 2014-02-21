@@ -29,7 +29,7 @@ function mlput(ml, ex::Expr)
     if ex.head == :call
         fn = ex.args[1]
         mlput(ml, MLFunction(get(symbolsub, fn, fn), length(ex.args)-1))
-        for arg = ex.args[2:]
+        for arg = ex.args[2:end]
             mlput(ml, arg)
         end
     elseif ex.head == :comparison
