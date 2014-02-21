@@ -23,5 +23,5 @@ l = dlopen_e("mathlink")
 if l != C_NULL
     dlclose(l)
 else
-    error("could not find mathlink library")
+    error("Could not find mathlink library")
 end

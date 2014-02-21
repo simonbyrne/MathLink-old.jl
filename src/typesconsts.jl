@@ -4,6 +4,10 @@ end
 type MLink
     ptr::Ptr{Void}
 end
+type MLMark
+    ptr::Ptr{Void}
+end
+
 
 typealias MLPKT Cint
 typealias MLERR Cint
@@ -37,7 +41,9 @@ type MLArray{T<:MLReals,N}
     headptr::Ptr{Ptr{Uint8}}
 end
 
-# convert backwards and forwards
+# convert between MLArray and julia Array
+
+# Note: this does NOT copy the data, so resulting array should not be modified, or used after mlrelease
 function convert{T,N}(::Type{Array{T}},ma::MLArray{T,N})
     dims = tuple(Int[unsafe_load(ma.dimptr,i) for i = N:-1:1]...)
     pointer_to_array(ma.arrptr,dims)

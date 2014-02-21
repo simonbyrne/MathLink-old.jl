@@ -10,6 +10,18 @@ function mlput(ml,x::BigFloat)
     mlput(ml,string(x))
 end
 mlget(ml, ::Type{BigFloat}) = BigFloat(split(mlget(ml,String),'`')[1])
+
+# default representation
+mlget(ml::MLink,::Type{Integer}) = mlget(ml,Int)
+mlget(ml::MLink,::Type{Real}) = mlget(ml,Real64)
+mlget(ml::MLink,::Type{FloatingPoint}) = mlget(ml,Real64)
+
+# automatrically figure out which type to get
+mlget(ml) = mlget(ml, tokens[mlgetnext(ml)])
+
+
+
+
                                              
 const symbolsub = {
              :+ => :Plus,
@@ -60,10 +72,6 @@ function mlput(ml, ex::Expr)
         end
     end
 end
-
-
-# automatrically figure out which type to get
-mlget(ml) = mlget(ml, tokens[mlgetnext(ml)])
 
 # automatically construct expression
 function mlget(ml, ::Type{Expr})

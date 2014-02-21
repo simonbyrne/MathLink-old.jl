@@ -3,8 +3,12 @@ using MathLink
 e = mlinitialize()
 l = mlopen(e)
 
-# skip input packet
-p = mlnextpacket(l)
+mlactivate(l)
+
+# skip initial input packet
+if mlnextpacket(l) != MathLink.INPUTNAMEPKT
+    error("Unexpected MathLink packet")
+end
 mlnewpacket(l)
 
 
@@ -28,17 +32,17 @@ mlget(l,Expr)
 
 mlput(l,MLFunction(:EvaluatePacket,1))
 mlput(l,MLFunction(:ToExpression,1))
-mlput(l,"π")
+mlput(l,"Sin[π]")
 mlendpacket(l)
 
 p = mlnextpacket(l)
 mlget(l,Expr)
 
 
-mlputfunction(l,"Plot",2)
-mlputfunction(l,"Sin",1)
+mlput(l,MLFunction("Plot",2))
+mlput(l,MLFunction("Sin",1))
 mlput(l,:x)
-mlputfunctino(l,"List",3)
+mlput(l,MLFunction("List",3))
 mlput(l,:x)
 mlput(l,0)
 mlput(l,2)

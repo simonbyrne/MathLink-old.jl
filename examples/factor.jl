@@ -10,8 +10,8 @@ mlnewpacket(l)
 
 
 # factor(123456789)
-mlputfunction(l,"EvaluatePacket",1)
-mlputfunction(l,"FactorInteger",1)
+mlput(l,MLFunction("EvaluatePacket",1))
+mlput(l,MLFunction("FactorInteger",1))
 mlput(l,123456789)
 mlendpacket(l)
 

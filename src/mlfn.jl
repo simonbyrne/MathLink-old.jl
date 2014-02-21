@@ -15,7 +15,7 @@ function mlopen{T<:String}(env::MLEnv, argv::Vector{T})
     erra = Array(Cint,1)
     ml = ccall((:MLOpenArgcArgv,:mathlink), MLink, (MLEnv, Cint, Ptr{Ptr{Uint8}}, Ptr{Cint}), env, length(argv), argv, erra)
     if erra[1] != MLEOK
-        error("Could not start MathLink ",erra[1])
+        error("MathLink: Could not open link ",erra[1])
     end
     return ml
 end
@@ -23,7 +23,7 @@ function mlopen(env::MLEnv, str::String)
     erra = Array(Cint,1)
     ml = ccall((:MLOpenString,:mathlink), MLink, (MLEnv, Ptr{Uint8}, Ptr{Cint}), env, str, erra)
     if erra[1] != MLEOK
-        error("Could not start MathLink ",erra[1])
+        error("MathLink: Could not open link ",erra[1])
     end
     return ml
 end
@@ -41,14 +41,14 @@ end
 
 mlactivate(ml::MLink) = ccall((:MLActivate,:mathlink), MLRTN, (MLink,), ml) != MLRTN_ERR
 mlready(ml::MLink) = ccall((:MLReady,:mathlink), MLRTN, (MLink,), ml) != MLRTN_ERR
-
+    
 
 
 # error handling
 macro mlerr(expr)
     quote
         if $(esc(expr)) == MLRTN_ERR
-            error("MathLink error ", mlerrormessage(ml))
+            error("MathLink: ", mlerrormessage(ml))
         end
     end
 end
@@ -57,12 +57,10 @@ mlerror(ml::MLink) = ccall((:MLError,:mathlink), MLERR, (MLink,), ml)
 mlerrormessage(ml::MLink) = bytestring(ccall((:MLErrorMessage,:mathlink), Ptr{Uint8}, (MLink,), ml))
 mlclearerror(ml::MLink) = ccall((:MLReady,:mathlink), MLRTN, (MLink,), ml) != MLRTN_ERR
 
-
+# packet handling
 function mlflush(ml::MLink)
     @mlerr ccall((:MLFlush,:mathlink), MLRTN, (MLink,), ml)
 end
-
-
 
 mlendpacket(ml::MLink) = ccall((:MLEndPacket,:mathlink), None, (MLink,), ml)
 
@@ -79,7 +77,7 @@ end
 
 # put and get for different types
 
-# strings
+# strings and symbols
 function mlput(ml::MLink,s::ASCIIString)
     @mlerr ccall((:MLPutByteString,:mathlink), MLRTN, (MLink, Ptr{Uint8}, Cint), ml, s.data, length(s.data))
 end
@@ -108,8 +106,7 @@ end
 function mlget(ml::MLink,::Type{UTF8String})
     stra = Array(Ptr{Uint8},1)
     lb = Array(Cint,1)
-    lc = Array(Cint,1)
-    @mlerr ccall((:MLGetUTF8String,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, lc)
+    @mlerr ccall((:MLGetUTF8String,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, &zero(Cint))
     str = utf8(copy(pointer_to_array(stra[1],int(lb[1]))))
     ccall((:MLReleaseUTF8String,:mathlink), None, (MLink, Ptr{Uint8}, Cint), ml, stra[1], lb[1])
     return str
@@ -120,8 +117,7 @@ mlget(ml::MLink,::Type{String}) = mlget(ml::MLink,UTF8String)
 function mlget(ml::MLink,::Type{Symbol})
     stra = Array(Ptr{Uint8},1)
     lb = Array(Cint,1)
-    lc = Array(Cint,1)
-    @mlerr ccall((:MLGetUTF8Symbol,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, lc)
+    @mlerr ccall((:MLGetUTF8Symbol,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, &zero(Cint))
     str = utf8(copy(pointer_to_array(stra[1],int(lb[1]))))
     ccall((:MLReleaseUTF8Symbol,:mathlink), None, (MLink, Ptr{Uint8}, Cint), ml, stra[1], lb[1])
     return symbol(str)
@@ -140,6 +136,7 @@ for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
             return na[1]
         end
 
+        # Methods for moving arrays
         function mlput{N}(ml::MLink, a::MLArray{$T,N})
             @mlerr ccall(($(string(:MLPut,T,:Array)),:mathlink), MLRTN, 
                          (MLink, Ptr{$T}, Ptr{Cint}, Ptr{Ptr{Uint8}}, Cint),
@@ -152,7 +149,7 @@ for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
             na = Array(Cint,1)    
             @mlerr ccall(($(string(:MLGet,T,:Array)),:mathlink), MLRTN, 
                      (MLink, Ptr{Ptr{$T}}, Ptr{Ptr{Cint}}, Ptr{Ptr{Ptr{Uint8}}}, Ptr{Cint}), 
-                     ml, aa, la, ha, nda)
+                     ml, arra, dima, heada, na)
             MLArray{$T,int(na[1])}(arra[1],dima[1],heada[1])
         end
         function mlrelease{N}(ml::MLink, a::MLArray{$T,N})
@@ -173,14 +170,6 @@ function mlget{T<:MLReals}(ml::MLink, ::Type{Array{T}})
     mlrelease(ml,ma)
     a
 end
-
-
-
-# default representation
-mlget(ml::MLink,::Type{Integer}) = mlget(ml,Int)
-mlget(ml::MLink,::Type{Real}) = mlget(ml,Real64)
-mlget(ml::MLink,::Type{FloatingPoint}) = mlget(ml,Real64)
-
 
 
 
@@ -207,4 +196,75 @@ end
 
 
 # loopbacks
+function mlloopbackopen(e::MLEnv)
+    erra = Array(Cint,1)
+    ml = ccall((:MLLoopbackOpen,:mathlink), MLink, (MLEnv, Ptr{Cint}), env, erra)
+    if erra[1] != MLEOK
+        error("MathLink: Could not open loopback link ",erra[1])
+    end
+    return ml
+end
+
+function mltransferexpression(dst::MLink,src::MLink)
+    if ccall((:MLTransferExpression,:mathlink), MLRTN, (MLink, MLink), dst, src) == MLRTN_ERR
+        error("MathLink: Could not transfer expression")
+    end
+end
+function mltransfertoendofloopbacklink(dst::MLink,src::MLink)
+    if ccall((:MLTransferToEndOfLoopbackLink,:mathlink), MLRTN, (MLink, MLink), dst, src) == MLRTN_ERR
+        error("MathLink: Could not transfer expression")
+    end
+end
+
+# marks
+function mlcreatemark(ml::MLink)
+    mk = ccall((:MLCreateMark,:mathlink), MLMark, (MLink,), ml)
+    if mk.ptr == C_NULL
+        error("MathLink: Could not create mark")
+    end
+    mk
+end
+
+function mlseektomark(ml::MLink,mk::MLMark,n::Integer)
+    sk = ccall((:MLSeekToMark,:mathlink), MLMark, (MLink,MLMark,Cint), ml, mk, n)
+    if sk.ptr == C_NULL
+        error("MathLink: Could not seek mark")
+    end
+    sk
+end
+mlseektomark(ml::MLink,mk::MLMark) = mlseektomark(ml,mk,zero(Cint))
+
+mldestroymark(ml::MLink,mk::MLMark) = ccall((:MLDestroyMark,:mathlink), None, (MLink, MLMark), ml, mk)
+
+
+
+# misc
+function mlgetlinkedenvidstring(ml::MLink)
+    stra = Array(Ptr{Uint8},1)
+    @mlerr ccall((:MLGetLinkedEnvIDString,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}}), ml, stra)
+    str = bytestring(stra[1])
+    ccall((:MLReleaseEnvIDString,:mathlink), None, (MLink, Ptr{Uint8}), ml, stra[1])
+    return str
+end
+function mlsetenvidstring(e::MLEnv,s::ASCIIString)
+    if ccall((:MLSetEnvIDString,:mathlink), MLRTN, (MLEnv, Ptr{Uint8}), e, bytestring(s)) == MLRTN_ERR
+        error("MathLink: Could not set EnvID string")
+    end
+end
+
+mllinkname(ml::MLink) = bytestring(ccall((:MLLinkName,:mathlink), Ptr{Uint8}, (MLink,), ml))
+function mltolinkid(ml::MLink)
+    id = ccall((:MLToLinkID,:mathlink), Clong, (MLink,), ml)
+    if id == 0
+        error("MathLink: Could not find link id")
+    end
+    id
+end
+function mlfromlinkid(e::MLEnv,id) 
+    ml = ccall((:MLFromLinkID,:mathlink), MLink, (MLEnv,Clong), e, id)
+    if ml.ptr == C_NULL
+        error("MathLink: No MLink found")
+    end
+    ml
+end
 

@@ -1,6 +1,7 @@
 using MathLink
 
 e = mlinitialize()
+
 l = mlopen(e)
 mlactivate(l)
 
@@ -12,8 +13,8 @@ mlnewpacket(l)
 
 
 # 1) log(2.0)
-mlputfunction(l,"EvaluatePacket",1)
-mlputfunction(l,"Log",1)
+mlput(l,MLFunction("EvaluatePacket",1))
+mlput(l,MLFunction("Log",1))
 mlput(l,2.0)
 mlendpacket(l)
 
@@ -43,8 +44,8 @@ mlget(l,Float64)
 
 
 # 3) log(2)
-mlputfunction(l,"EvaluatePacket",1)
-mlputfunction(l,"Log",1)
+mlput(l,MLFunction("EvaluatePacket",1))
+mlput(l,MLFunction("Log",1))
 mlput(l,2)
 mlendpacket(l)
 
