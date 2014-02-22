@@ -84,12 +84,19 @@ function mlputnext(ml::MLink,t)
     @mlerr ccall((:MLPutNext,:mathlink), MLRTN, (MLink, MLTKN), ml, t)
 end
 
-# undocumented: similar to mlgetnext, except returns appropriate binary type
+mlgettype(ml::MLink) = ccall((:MLGetType,:mathlink), MLTKN, (MLink,), ml)
+
+
+# undocumented: similar to mlgetnext/mlgettype, except returns appropriate binary type
 # if available (e.g. Int32, Int64, Float64). Otherwise returns standard
 # tokens.
 function mlgetnextraw(ml::MLink)
     ccall((:MLGetNextRaw,:mathlink), MLTKN, (MLink,), ml)
 end
+function mlgetrawtype(ml::MLink)
+    ccall((:MLGetRawType,:mathlink), MLTKN, (MLink,), ml)
+end
+
 
 
 # put and get for different types

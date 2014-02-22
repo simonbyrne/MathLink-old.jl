@@ -44,8 +44,7 @@ mlget(ml::MLink,::Type{Integer}) = mlget(ml,BigInt)
 mlget(ml::MLink,::Type{FloatingPoint}) = mlget(ml,BigFloat)
 
 # automatically handle types
-# NOTE: don't run this after mlgetnext/mlgetnexraw has already been run
-mlget(ml::MLink) = mlget(ml, token_type[mlgetnextraw(ml)])
+mlget(ml::MLink) = mlget(ml, token_type[mlgetrawtype(ml)])
 
 
 
