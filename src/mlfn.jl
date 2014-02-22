@@ -1,6 +1,10 @@
 # initialize/deinitialize
 function mlinitialize()
-    ccall((:MLInitialize,:mathlink), MLEnv, (Ptr{Uint8},), C_NULL)
+    env = ccall((:MLInitialize,:mathlink), MLEnv, (Ptr{Uint8},), C_NULL)
+    if env.ptr == C_NULL
+        error("MathLink: could not initialize library")
+    end
+    env
 end
 
 function mldeinitialize(env::MLEnv)
@@ -40,10 +44,7 @@ end
 
 
 mlactivate(ml::MLink) = ccall((:MLActivate,:mathlink), MLRTN, (MLink,), ml) != MLRTN_ERR
-mlready(ml::MLink) = ccall((:MLReady,:mathlink), MLRTN, (MLink,), ml) != MLRTN_ERR
     
-
-
 # error handling
 macro mlerr(expr)
     quote
@@ -62,17 +63,33 @@ function mlflush(ml::MLink)
     @mlerr ccall((:MLFlush,:mathlink), MLRTN, (MLink,), ml)
 end
 
+mlready(ml::MLink) = ccall((:MLReady,:mathlink), MLRTN, (MLink,), ml) != MLRTN_ERR # true if data ready to be read
+
+
 mlendpacket(ml::MLink) = ccall((:MLEndPacket,:mathlink), None, (MLink,), ml)
 
 mlnewpacket(ml::MLink) = ccall((:MLNewPacket,:mathlink), None, (MLink,), ml)
-mlnextpacket(ml::MLink) = ccall((:MLNextPacket,:mathlink), MLPKT, (MLink,), ml)
 
+function mlnextpacket(ml::MLink) 
+    pkt = ccall((:MLNextPacket,:mathlink), MLPKT, (MLink,), ml)
+    if pkt == ILLEGALPKT
+        error("MathLink: Illegal packet")
+    end
+    pkt
+end
+
+# token handling
 mlgetnext(ml::MLink) = ccall((:MLGetNext,:mathlink), MLTKN, (MLink,), ml)
-
 function mlputnext(ml::MLink,t)
     @mlerr ccall((:MLPutNext,:mathlink), MLRTN, (MLink, MLTKN), ml, t)
 end
 
+# undocumented: similar to mlgetnext, except returns appropriate binary type
+# if available (e.g. Int32, Int64, Float64). Otherwise returns standard
+# tokens.
+function mlgetnextraw(ml::MLink)
+    ccall((:MLGetNextRaw,:mathlink), MLTKN, (MLink,), ml)
+end
 
 
 # put and get for different types
@@ -188,9 +205,10 @@ function mlget(ml::MLink,::Type{MLFunction})
     MLFunction(symbol(str), na[1])
 end
 
-function mlcheckfunction(ml::MLink,fname) 
+# formerly MLCheckFunction
+function mltesthead(ml::MLink,fname) 
     na = Array(Cint, 1)
-    @mlerr ccall((:MLCheckFunction,:mathlink), MLRTN, (MLink, Ptr{Uint8}, Ptr{Cint}), ml, string(fname), na)
+    @mlerr ccall((:MLTestHead,:mathlink), MLRTN, (MLink, Ptr{Uint8}, Ptr{Cint}), ml, string(fname), na)
     na[1]
 end
 

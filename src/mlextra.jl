@@ -1,23 +1,51 @@
 # big integers and floats: pass as strings
-function mlput(ml,n::BigInt)
+function mlput(ml::MLink,n::BigInt)
     mlputnext(ml,MLTKINT)
     mlput(ml,string(n))
 end
-mlget(ml,::Type{BigInt}) = BigInt(mlget(ml,String))
+mlget(ml::MLink,::Type{BigInt}) = BigInt(mlget(ml,String))
 
-function mlput(ml,x::BigFloat)
+
+function mlput(ml::MLink,x::BigFloat)
     mlputnext(ml,MLTKREAL)
     mlput(ml,string(x))
 end
-mlget(ml, ::Type{BigFloat}) = BigFloat(split(mlget(ml,String),'`')[1])
+
+# a wrapper around a string for storing Mathematica arbitrary precision floats
+type MLFloatStr
+    str::ASCIIString
+end
+
+function mlput(ml::MLink,x::MLFloatStr)
+    mlputnext(ml,MLTKREAL)
+    mlput(ml,x.str)
+end
+
+function convert(::Type{BigFloat}, x::MLFloatStr)
+    exp_ind = search(x.str,'*')
+    prc_ind = search(x.str,'`')
+    if exp_ind == 0
+        bstr = prc_ind == 0 ? x.str : x.str[1:prc_ind-1]
+    else
+        sstr = prc_ind == 0 ? x.str[1:exp_ind-1] : x.str[1:prc_ind-1]
+        estr = x.str[exp_ind+2:end]
+        bstr = sstr*"e"*estr
+    end
+    BigFloat(bstr)
+end
+
+mlget(ml::MLink,::Type{MLFloatStr}) = MLFloatStr(mlget(ml,ASCIIString))
+mlget(ml::MLink,::Type{BigFloat}) = convert(BigFloat,mlget(ml,MLFloatStr))
+
+
 
 # default representation
-mlget(ml::MLink,::Type{Integer}) = mlget(ml,Int)
-mlget(ml::MLink,::Type{Real}) = mlget(ml,Real64)
-mlget(ml::MLink,::Type{FloatingPoint}) = mlget(ml,Real64)
+mlget(ml::MLink,::Type{Integer}) = mlget(ml,BigInt)
+mlget(ml::MLink,::Type{FloatingPoint}) = mlget(ml,BigFloat)
 
-# automatrically figure out which type to get
-mlget(ml) = mlget(ml, tokens[mlgetnext(ml)])
+# automatically handle types
+# NOTE: don't run this after mlgetnext/mlgetnexraw has already been run
+mlget(ml::MLink) = mlget(ml, token_type[mlgetnextraw(ml)])
 
 
 
