@@ -58,6 +58,7 @@ mlerror(ml::MLink) = ccall((:MLError,:mathlink), MLERR, (MLink,), ml)
 mlerrormessage(ml::MLink) = bytestring(ccall((:MLErrorMessage,:mathlink), Ptr{Uint8}, (MLink,), ml))
 mlclearerror(ml::MLink) = ccall((:MLReady,:mathlink), MLRTN, (MLink,), ml) != MLRTN_ERR
 
+
 # packet handling
 function mlflush(ml::MLink)
     @mlerr ccall((:MLFlush,:mathlink), MLRTN, (MLink,), ml)
@@ -79,11 +80,11 @@ function mlnextpacket(ml::MLink)
 end
 
 # token handling
-mlgetnext(ml::MLink) = ccall((:MLGetNext,:mathlink), MLTKN, (MLink,), ml)
 function mlputnext(ml::MLink,t)
     @mlerr ccall((:MLPutNext,:mathlink), MLRTN, (MLink, MLTKN), ml, t)
 end
 
+mlgetnext(ml::MLink) = ccall((:MLGetNext,:mathlink), MLTKN, (MLink,), ml)
 mlgettype(ml::MLink) = ccall((:MLGetType,:mathlink), MLTKN, (MLink,), ml)
 
 
@@ -101,100 +102,137 @@ end
 
 # put and get for different types
 
-# strings and symbols
-function mlput(ml::MLink,s::ASCIIString)
-    @mlerr ccall((:MLPutByteString,:mathlink), MLRTN, (MLink, Ptr{Uint8}, Cint), ml, s.data, length(s.data))
-end
-function mlput(ml::MLink,s::UTF8String)
-    @mlerr ccall((:MLPutUTF8String,:mathlink), MLRTN, (MLink, Ptr{Uint8}, Cint), ml, s.data, length(s.data))
+# strings and symbols refs
+for S in (:String,:Symbol)
+    L = symbol(string(:ML,S,:Ref))
+    
+    @eval begin
+        # MLGet*String calls are all different
+        function mlget(ml::MLink,::Type{$L{ASCIIString}})
+            stra = Array(Ptr{Uint8},1)
+            lba = Array(Cint,1)
+            @mlerr ccall(($(string(:MLGetByte,S)),:mathlink), MLRTN,
+                         (MLink, Ptr{Ptr{Uint8}}, Ptr{Cint}, Clong),
+                         ml, stra, lba, zero(Clong))
+            return $L{ASCIIString,Uint8}(stra[1],lba[1])
+        end
+        function mlget(ml::MLink,::Type{$L{UTF8String}})
+            stra = Array(Ptr{Uint8},1)
+            lba = Array(Cint,1)
+            @mlerr ccall(($(string(:MLGetUTF8,S)),:mathlink), MLRTN,
+                         (MLink, Ptr{Ptr{Uint8}}, Ptr{Cint}, Ptr{Cint}),
+                         ml, stra, lba, &zero(Cint))
+            return $L{UTF8String,Uint8}(stra[1],lba[1])
+        end
+        function mlget(ml::MLink,::Type{$L{UTF16String}})
+            stra = Array(Ptr{Uint16},1)
+            lba = Array(Cint,1)
+            @mlerr ccall(($(string(:MLGetUTF16,S)),:mathlink), MLRTN,
+                         (MLink, Ptr{Ptr{Uint16}}, Ptr{Cint}, Ptr{Cint}),
+                         ml, stra, lba, &zero(Cint))
+            return $L{UTF16String,Uint16}(stra[1],lba[1])
+        end
+        function mlget(ml::MLink,::Type{$L{UTF32String}})
+            stra = Array(Ptr{Char},1)
+            lba = Array(Cint,1)
+            @mlerr ccall(($(string(:MLGetUTF32,S)),:mathlink), MLRTN,
+                         (MLink, Ptr{Ptr{Char}}, Ptr{Cint}),
+                         ml, stra, lba)
+            return $L{UTF32String,Char}(stra[1],lba[1])
+        end
+    end
+
+    for (M,T,U) in ((:Byte,:ASCIIString,:Uint8),(:UTF8,:UTF8String,:Uint8),
+                    (:UTF16,:UTF16String,:Uint16),(:UTF32,:UTF32String,:Char))
+        @eval begin
+            function mlput(ml::MLink,s::$(symbol(string(:ML,S,:Ref))){$T,$U})
+                @mlerr ccall(($(string(:MLPut,M,S)),:mathlink), MLRTN, 
+                             (MLink, Ptr{$U}, Cint), ml, s.strptr, s.len)
+            end
+
+            function mlrelease(ml::MLink, s::$(symbol(string(:ML,S,:Ref))){$T,$U})
+                ccall(($(string(:MLRelease,M,S)),:mathlink), None,
+                      (MLink, Ptr{$U}, Cint), ml, s.strptr, s.len)
+            end
+        end
+    end
 end
 
-# correctly handle utf8 symbols: we can't dispatch on type
-function mlputsymbol(ml::MLink,s::ASCIIString)
-    @mlerr ccall((:MLPutByteSymbol,:mathlink), MLRTN, (MLink, Ptr{Uint8}, Cint), ml, s.data, length(s.data))
+# string and symbols: these clean up after themselves
+function mlget{T<:MLStrings}(ml::MLink,::Type{T})
+    msr = mlget(ml,MLStringRef{T})
+    str = T(copy(convert(Array,msr)))
+    mlrelease(ml,msr)
+    str
 end
-function mlputsymbol(ml::MLink,s::UTF8String)
-    @mlerr ccall((:MLPutUTF8Symbol,:mathlink), MLRTN, (MLink, Ptr{Uint8}, Cint), ml, s.data, length(s.data))
-end
-mlput(ml,s::Symbol) = mlputsymbol(ml,string(s))
-
-
-function mlget(ml::MLink,::Type{ASCIIString})
-    stra = Array(Ptr{Uint8},1)
-    @mlerr ccall((:MLGetString,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}}), ml, stra)
-    str = bytestring(stra[1])
-    ccall((:MLReleaseByteString,:mathlink), None, (MLink, Ptr{Uint8}), ml, stra[1])
-    return str
+function mlput(ml::MLink,str::MLStrings)
+    mlput(ml,convert(MLStringRef,str))
 end
 
-function mlget(ml::MLink,::Type{UTF8String})
-    stra = Array(Ptr{Uint8},1)
-    lb = Array(Cint,1)
-    @mlerr ccall((:MLGetUTF8String,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, &zero(Cint))
-    str = utf8(copy(pointer_to_array(stra[1],int(lb[1]))))
-    ccall((:MLReleaseUTF8String,:mathlink), None, (MLink, Ptr{Uint8}, Cint), ml, stra[1], lb[1])
-    return str
-end
-mlget(ml::MLink,::Type{String}) = mlget(ml::MLink,UTF8String)
-
-# by default, use utf8 strings
 function mlget(ml::MLink,::Type{Symbol})
-    stra = Array(Ptr{Uint8},1)
-    lb = Array(Cint,1)
-    @mlerr ccall((:MLGetUTF8Symbol,:mathlink), MLRTN, (MLink, Ptr{Ptr{Uint8}},Ptr{Cint},Ptr{Cint}), ml, stra, lb, &zero(Cint))
-    str = utf8(copy(pointer_to_array(stra[1],int(lb[1]))))
-    ccall((:MLReleaseUTF8Symbol,:mathlink), None, (MLink, Ptr{Uint8}, Cint), ml, stra[1], lb[1])
-    return symbol(str)
+    msr = mlget(ml,MLSymbolRef{UTF8String})
+    sym = symbol(UTF8String(copy(convert(Array,msr))))
+    mlrelease(ml,msr)
+    sym
+end
+function mlput(ml::MLink,s::Symbol)
+    mlput(ml,convert(MLSymbolRef,string(s)))
 end
 
 
-
-for T in (:Integer16,:Integer32,:Integer64,:Real32,:Real64)
+# numeric types
+for (M,T) in ((:Integer16,:Int16),(:Integer32,:Int32),(:Integer64,:Int64),
+              (:Real32,:Float32),(:Real64,:Float64))
     @eval begin
         function mlput(ml::MLink,n::$T) 
-            @mlerr ccall(($(string(:MLPut,T)),:mathlink), MLRTN, (MLink, $T), ml, n)
+            @mlerr ccall(($(string(:MLPut,M)),:mathlink), MLRTN, (MLink, $T), ml, n)
         end
         function mlget(ml::MLink,::Type{$T}) 
             na = Array($T,1)    
-            @mlerr ccall(($(string(:MLGet,T)),:mathlink), MLRTN, (MLink, Ptr{$T}), ml, na)
+            @mlerr ccall(($(string(:MLGet,M)),:mathlink), MLRTN, (MLink, Ptr{$T}), ml, na)
             return na[1]
         end
+    end
+end
 
+# numeric arrays refs (including bytes)
+for (M,T) in ((:Integer16,:Int16),(:Integer32,:Int32),(:Integer64,:Int64),
+              (:Real32,:Float32),(:Real64,:Float64),(:Byte,:Uint8))
+    @eval begin
         # Methods for moving arrays
-        function mlput{N}(ml::MLink, a::MLArray{$T,N})
-            @mlerr ccall(($(string(:MLPut,T,:Array)),:mathlink), MLRTN, 
+        function mlput{N}(ml::MLink, a::MLArrayRef{$T,N})
+            @mlerr ccall(($(string(:MLPut,M,:Array)),:mathlink), MLRTN, 
                          (MLink, Ptr{$T}, Ptr{Cint}, Ptr{Ptr{Uint8}}, Cint),
                          ml, a.arrptr, a.dimptr, a.headptr, N)
         end
-        function mlget(ml::MLink, ::Type{MLArray{$T}})
+        function mlget(ml::MLink, ::Type{MLArrayRef{$T}})
             arra = Array(Ptr{$T},1)
             dima = Array(Ptr{Cint},1)
             heada = Array(Ptr{Ptr{Uint8}},1)
             na = Array(Cint,1)    
-            @mlerr ccall(($(string(:MLGet,T,:Array)),:mathlink), MLRTN, 
+            @mlerr ccall(($(string(:MLGet,M,:Array)),:mathlink), MLRTN, 
                      (MLink, Ptr{Ptr{$T}}, Ptr{Ptr{Cint}}, Ptr{Ptr{Ptr{Uint8}}}, Ptr{Cint}), 
                      ml, arra, dima, heada, na)
-            MLArray{$T,int(na[1])}(arra[1],dima[1],heada[1])
+            MLArrayRef{$T,int(na[1])}(arra[1],dima[1],heada[1])
         end
-        function mlrelease{N}(ml::MLink, a::MLArray{$T,N})
-            ccall(($(string(:MLRelease,T,:Array)),:mathlink), None, 
+        function mlrelease{N}(ml::MLink, a::MLArrayRef{$T,N})
+            ccall(($(string(:MLRelease,M,:Array)),:mathlink), None, 
                   (MLink, Ptr{$T}, Ptr{Cint}, Ptr{Ptr{Uint8}}, Cint), 
                   ml, a.arrptr, a.dimptr, a.headptr, N)
         end
-
     end
 end
 
-function mlput{T<:MLReals,N}(ml::MLink, a::Array{T,N})
-    mlput(ml,convert(MLArray{T},Array{T,N}))
+# numeric arrays: copy and automatic cleanup
+function mlput{T<:Union(MLReals,Uint8),N}(ml::MLink, a::Array{T,N})
+    mlput(ml,convert(MLArrayRef{T},Array{T,N}))
 end
-function mlget{T<:MLReals}(ml::MLink, ::Type{Array{T}})
-    ma = mlget(ml,MLArray{T})
+function mlget{T<:Union(MLReals,Uint8)}(ml::MLink, ::Type{Array{T}})
+    ma = mlget(ml,MLArrayRef{T})
     a = copy(convert(Array{T},ma))
     mlrelease(ml,ma)
     a
 end
-
 
 
 # functions

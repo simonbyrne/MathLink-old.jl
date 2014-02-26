@@ -38,22 +38,47 @@ typealias Real64 Float64
 typealias MLReals Union(Integer16,Integer32,Integer64,Real32,Real64)
 
 # for efficiently passing large numeric arrays, rather than building lots of MLFunctions
-type MLArray{T<:MLReals,N}
+type MLArrayRef{T<:Union(MLReals,Uint8),N}
     arrptr::Ptr{T}
     dimptr::Ptr{Cint}
     headptr::Ptr{Ptr{Uint8}}
 end
 
-# conversions between MLArray and julia Array
+# conversions between MLArrayRef and julia Array
 # Note: this does NOT copy the data, so resulting array should not be modified, or used after mlrelease
-function convert{T,N}(::Type{Array{T}},ma::MLArray{T,N})
+function convert{T,N}(::Type{Array{T}},ma::MLArrayRef{T,N})
     dims = tuple(Int[unsafe_load(ma.dimptr,i) for i = N:-1:1]...)
     pointer_to_array(ma.arrptr,dims)
 end
-function convert{T,N}(::Type{MLArray{T}},a::Array{T,N})
+function convert{T,N}(::Type{MLArrayRef{T}},a::Array{T,N})
     s = size(a)
     dims = Cint[s[i] for i = ndims(a):-1:1]
     MLArray{T,N}(pointer(a),pointer(dims),C_NULL)
+end
+
+typealias MLStrings Union(ASCIIString,UTF8String,UTF16String,UTF32String)
+
+abstract MLAbstractStringRef{T,U}
+type MLStringRef{T<:MLStrings,U<:Union(Uint8,Uint16,Char)} <: MLAbstractStringRef{T,U}
+    strptr::Ptr{U}
+    len::Cint
+end
+type MLSymbolRef{T<:MLStrings,U<:Union(Uint8,Uint16,Char)} <: MLAbstractStringRef{T,U}
+    strptr::Ptr{U}
+    len::Cint
+end
+
+# conversions between MLStringRef and julia strings
+# Note: this does NOT copy the data, so resulting array should not be modified, or used after mlrelease
+function convert{T<:MLStrings,U}(::Type{Array},ms::MLAbstractStringRef{T,U})
+    pointer_to_array(ms.strptr,int(ms.len))
+end
+function convert{T<:MLStrings,U}(::Type{T},ms::MLAbstractStringRef{T,U})
+    T(convert(Array,ms))
+end
+
+function convert{T<:MLStrings,M<:MLAbstractStringRef}(::Type{M},str::T)
+    M{T,eltype(str.data)}(str.data, convert(Cint,length(str.data)))
 end
 
 

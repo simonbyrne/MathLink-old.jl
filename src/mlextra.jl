@@ -40,6 +40,7 @@ mlget(ml::MLink,::Type{BigFloat}) = convert(BigFloat,mlget(ml,MLFloatStr))
 
 
 # default representation
+mlget(ml::MLink,::Type{String}) = mlget(ml,UTF8String)
 mlget(ml::MLink,::Type{Integer}) = mlget(ml,BigInt)
 mlget(ml::MLink,::Type{FloatingPoint}) = mlget(ml,BigFloat)
 
