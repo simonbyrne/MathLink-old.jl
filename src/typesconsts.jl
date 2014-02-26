@@ -27,25 +27,19 @@ end
 
 
 # MathLink type names
-# defined here for convenience
-typealias Integer16 Int16
-typealias Integer32 Int32
-typealias Integer64 Int64
-typealias Real32 Float32
-typealias Real64 Float64
-# typealias Real128 Float128 # not yet supported by julia
-
-typealias MLReals Union(Integer16,Integer32,Integer64,Real32,Real64)
+typealias MLReals Union(Int16,Int32,Int64,Float32,Float64) # Float128 also available
+typealias MLArrays Union(MLReals,Uint8)
 
 # for efficiently passing large numeric arrays, rather than building lots of MLFunctions
-type MLArrayRef{T<:Union(MLReals,Uint8),N}
+type MLArrayRef{T<:MLArrays,N}
     arrptr::Ptr{T}
     dimptr::Ptr{Cint}
     headptr::Ptr{Ptr{Uint8}}
 end
 
 # conversions between MLArrayRef and julia Array
-# Note: this does NOT copy the data, so resulting array should not be modified, or used after mlrelease
+# NOTE: this does NOT copy the data, so resulting array should not be
+# modified, or used after mlrelease
 function convert{T,N}(::Type{Array{T}},ma::MLArrayRef{T,N})
     dims = tuple(Int[unsafe_load(ma.dimptr,i) for i = N:-1:1]...)
     pointer_to_array(ma.arrptr,dims)
@@ -69,7 +63,8 @@ type MLSymbolRef{T<:MLStrings,U<:Union(Uint8,Uint16,Char)} <: MLAbstractStringRe
 end
 
 # conversions between MLStringRef and julia strings
-# Note: this does NOT copy the data, so resulting array should not be modified, or used after mlrelease
+# NOTE: this does NOT copy the data, so resulting array/string should not be
+# modified, or used after mlrelease
 function convert{T<:MLStrings,U}(::Type{Array},ms::MLAbstractStringRef{T,U})
     pointer_to_array(ms.strptr,int(ms.len))
 end

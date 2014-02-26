@@ -224,10 +224,10 @@ for (M,T) in ((:Integer16,:Int16),(:Integer32,:Int32),(:Integer64,:Int64),
 end
 
 # numeric arrays: copy and automatic cleanup
-function mlput{T<:Union(MLReals,Uint8),N}(ml::MLink, a::Array{T,N})
+function mlput{T<:MLArrays,N}(ml::MLink, a::Array{T,N})
     mlput(ml,convert(MLArrayRef{T},Array{T,N}))
 end
-function mlget{T<:Union(MLReals,Uint8)}(ml::MLink, ::Type{Array{T}})
+function mlget{T<:MLArrays}(ml::MLink, ::Type{Array{T}})
     ma = mlget(ml,MLArrayRef{T})
     a = copy(convert(Array{T},ma))
     mlrelease(ml,ma)
