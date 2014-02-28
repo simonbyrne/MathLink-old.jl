@@ -1,9 +1,9 @@
 macro getoption(name,default)
     quote
         if isdefined(Main,$(QuoteNode(name)))  
-            $(esc(name)) = Main.$name
+            const $(esc(name)) = Main.$name
         else
-            $(esc(name)) = $default
+            const $(esc(name)) = $default
         end
     end
 end        
@@ -25,13 +25,8 @@ end
     end
 end
 
-# mathlink libname varies by installation
-# this allows libname to be set at load time
-macro mathlink_lib()
-    :($(MATHLINK_LIB))
-end
 
-l = dlopen_e(@mathlink_lib)
+l = dlopen_e(MATHLINK_LIB)
 if l != C_NULL
     dlclose(l)
 else
