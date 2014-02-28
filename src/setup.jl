@@ -1,27 +1,39 @@
-# we need 
+macro getoption(name,default)
+    quote
+        if isdefined(Main,$(QuoteNode(name)))  
+            $(esc(name)) = Main.$name
+        else
+            $(esc(name)) = $default
+        end
+    end
+end        
 
-
-mathematica_home_path = get(ENV, "MATHEMATICA_HOME", "")
-mathematica_exec_path = get(ENV, "MATHEMATICA_EXEC", "")
-mathlink_lib_path = get(ENV, "MATHLINK_LIB", "")
 
 @osx_only begin
-    if mathematica_home_path == ""    
-        mathematica_home_path = "/Applications/Mathematica.app"
-    end
-    if mathematica_exec_path == ""
-        mathematica_exec_path = joinpath(mathematica_home_path,"Contents/MacOS/MathKernel")
-    end
-    if mathlink_lib_path == ""
-        mathlink_lib_path = joinpath(mathematica_home_path,"SystemFiles/Links/MathLink/DeveloperKit/MacOSX-x86-64/CompilerAdditions/mathlink.framework")
+    @getoption MATHEMATICA_HOME "/Applications/Mathematica.app"
+    @getoption MATHEMATICA_EXEC joinpath(MATHEMATICA_HOME,"Contents/MacOS/MathKernel")
+    @getoption MATHLINK_LIB joinpath(MATHEMATICA_HOME,"SystemFiles/Links/MathLink/DeveloperKit/MacOSX-x86-64/CompilerAdditions/mathlink.framework/mathlink")
+end
+
+@linux_only begin
+    @getoption MATHEMATICA_HOME "/usr/local/Wolfram/Mathematica"
+    @getoption MATHEMATICA_EXEC "math"
+    @getoption MATHLINK_LIB if WORD_SIZE == 32 
+        joinpath(MATHEMATICA_HOME,"SystemFiles/Links/MathLink/DeveloperKit/linux/CompilerAdditions/libML32i3.so")
+    else
+        joinpath(MATHEMATICA_HOME,"SystemFiles/Links/MathLink/DeveloperKit/linux-x86-64/CompilerAdditions/libML64i3.so")
     end
 end
 
+# mathlink libname varies by installation
+# this allows libname to be set at load time
+macro mathlink_lib()
+    :($(MATHLINK_LIB))
+end
 
-push!(DL_LOAD_PATH, mathlink_lib_path)
-l = dlopen_e("mathlink")
+l = dlopen_e(@mathlink_lib)
 if l != C_NULL
     dlclose(l)
 else
-    warn("Could not find mathlink library")
+    error("Could not find MathLink library: set either MATHEMATICA_HOME or MATHLINK_LIB before loading package.")
 end
