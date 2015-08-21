@@ -1,5 +1,9 @@
 # MathLink.jl
 
+NOTE: This package is no longer being actively maintained. Instead I suggest you try:
+* https://github.com/one-more-minute/Mathematica.jl
+* https://github.com/one-more-minute/MathLink.jl
+
 MathLink.jl provides bindings to the MathLink library, which is an interface for Mathematica. 
 
 ## Requirements
